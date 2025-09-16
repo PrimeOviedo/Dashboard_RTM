@@ -2,13 +2,15 @@ import streamlit as st
 import pandas as pd
 import pydeck as pdk
 import hashlib
+import glob
 import matplotlib.pyplot as plt
 
 st.set_page_config(page_title="Dashboard Maestro RTM", layout="wide")
 st.title("📍 Dashboard Maestro RTM")
 
 # Carga de datos
-df = pd.read_csv("data/clientes.csv")
+
+df = pd.concat([pd.read_csv(f) for f in glob.glob("data/salidas_por_centro/*.csv")], ignore_index=True)
 
 # Sidebar: filtros
 st.sidebar.header("Filtros")
