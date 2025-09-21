@@ -75,6 +75,9 @@ else:
 # Seguridad: eliminar filas sin coordenadas
 df_filtrado = df_filtrado.dropna(subset=["latitud", "longitud"])
 
+df_filtrado["latitud"] = pd.to_numeric(df_filtrado["latitud"], errors="coerce")
+df_filtrado["longitud"] = pd.to_numeric(df_filtrado["longitud"], errors="coerce")
+
 st.subheader(f"Indicadores para la UO: `{uo}`")
 
 # Validación final
