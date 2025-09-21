@@ -18,7 +18,7 @@ st.title("📍 Dashboard Maestro RTM")
 
 # Carga de datos
 
-df = pd.concat([pd.read_csv(f) for f in glob.glob("data/salidas_por_centro/*.csv")], ignore_index=True)
+df = pd.concat([pd.read_csv(f, low_memory=False, dtype=str) for f in glob.glob("data/salidas_por_centro/*.csv")], ignore_index=True)
 
 # ───── Filtros dependientes en Sidebar (con multiselect) ───────────────────────
 st.sidebar.header("Filtros")
