@@ -155,7 +155,8 @@ with col1_2:
                       maxdepth=4,
                       color_discrete_map={'(?)':'#282a2e','1DA':'#37b741','2DA':'#cfb53a',
                                           '3DA':'#ff0000','NO DATA':'#ff0000','-':'#ff0000'})
-    fig.update_traces(hovertemplate="<b>%{label}</b><br>Clientes reales: %{customdata[0]:,}<extra></extra>")
+    fig.update_traces(hovertemplate="<b>%{label}</b><br><extra></extra>")
+    fig.update_layout(margin=dict(t=0, l=0, r=0, b=0), width=400, height=400)  # 👈 aquí
     st.plotly_chart(fig, width="stretch")
 
 # Radar y tabla
