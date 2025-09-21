@@ -439,6 +439,8 @@ with col2:
             .set_table_styles([{'selector': 'th', 'props': [('text-align', 'center')]}])
             .hide(axis="index")  # Ocultar índice
         )
+
+        st.dataframe(styled_df_2, use_container_width=True, height=200)
     else:
         # Aplicar estilo
         styled_df = (
