@@ -186,7 +186,7 @@ with col1:
                                                   showline=True,linewidth=1,showgrid=True)),
                       paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
                       showlegend=False, height=500, margin=dict(l=40,r=40,t=40,b=40))
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='strech')
 
 with col2:
     df_visitas = df_filtrado.groupby('Ruta ZPV')[columnas_dias].sum(numeric_only=True)
@@ -208,10 +208,10 @@ with col2:
                 .set_table_styles([{'selector':'th','props':[('text-align','center')]}])
                 .hide(axis="index"))
 
-    st.dataframe(styled(en_parametro), use_container_width=True, height=200)
+    st.dataframe(styled(en_parametro), width='stretch', height=200)
     if not fuera_parametro.empty:
         st.write(f"Rutas fuera de parámetro encontradas: **{len(fuera_parametro)}**")
-        st.dataframe(styled(fuera_parametro), use_container_width=True, height=200)
+        st.dataframe(styled(fuera_parametro), width='stretch', height=200)
 
 # Lista de clientes
 st.subheader("📋 Lista de Clientes")
