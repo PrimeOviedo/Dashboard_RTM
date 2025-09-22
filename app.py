@@ -84,7 +84,7 @@ if df_filtrado.empty:
     st.warning("⚠️ No hay registros para los filtros seleccionados.")
     st.stop()
 else:
-    st.success(f"🔎 Registros encontrados: **{len(df_filtrado):,}**")
+    st.success(f"🔎 Registros encontrados: **{len(df_filtrado['ID_SAP'].unique()):,}**")
 
 
 def string_to_color(s):
@@ -169,15 +169,135 @@ with col1_2:
     df_sunburst["peso"] = 1
     df_sunburst["Ritmo_label"] = "Ritmo " + df_sunburst["RITMO"].astype(str)
     df_sunburst["FS_label"] = "FS " + df_sunburst["FS"].astype(str)
-    fig = px.sunburst(df_sunburst,
-                      path=["CENTRO", "MÉTODO_VENTA", "Ritmo_label", "FS_label"],
-                      values="peso", custom_data=["clientes"], color="MÉTODO_VENTA",
-                      maxdepth=4,
-                      color_discrete_map={'(?)':'#282a2e','1DA':'#37b741','2DA':'#cfb53a',
-                                          '3DA':'#ff0000','NO DATA':'#ff0000','-':'#ff0000'})
-    fig.update_traces(hovertemplate="<b>%{label}</b><br><extra></extra>")
-    fig.update_layout(margin=dict(t=0, l=0, r=0, b=0), width=400, height=400)  # 👈 aquí
-    st.plotly_chart(fig, width="stretch")
+
+    # --- Sunburst con colores por nivel (CENTRO / MÉTODO / RITMO / FS) ---
+    # 1) Pesos por nivel (suma de hojas)
+    peso_centro = (
+        df_sunburst.groupby(["CENTRO"], as_index=False)["peso"].sum()
+        .rename(columns={"peso": "value"})
+    )
+    peso_metodo = (
+        df_sunburst.groupby(["CENTRO", "MÉTODO_VENTA"], as_index=False)["peso"].sum()
+        .rename(columns={"peso": "value"})
+    )
+    peso_ritmo = (
+        df_sunburst.groupby(["CENTRO", "MÉTODO_VENTA", "RITMO"], as_index=False)["peso"].sum()
+        .rename(columns={"peso": "value"})
+    )
+    peso_leaf = (
+        df_sunburst.groupby(["CENTRO", "MÉTODO_VENTA", "RITMO", "FS_label"], as_index=False)["peso"].sum()
+        .rename(columns={"peso": "value"})
+    )
+
+    # 2) Clientes reales por nivel (desde df_treemap)
+    cli_centro = (
+        df_treemap.groupby(["CENTRO"], as_index=False)["ID_SAP"].nunique()
+        .rename(columns={"ID_SAP": "clientes"})
+    )
+    cli_metodo = (
+        df_treemap.groupby(["CENTRO", "MÉTODO_VENTA"], as_index=False)["ID_SAP"].nunique()
+        .rename(columns={"ID_SAP": "clientes"})
+    )
+    cli_ritmo = (
+        df_treemap.groupby(["CENTRO", "MÉTODO_VENTA", "RITMO"], as_index=False)["ID_SAP"].nunique()
+        .rename(columns={"ID_SAP": "clientes"})
+    )
+    cli_leaf = df_sunburst[["CENTRO", "MÉTODO_VENTA", "RITMO", "FS_label", "clientes"]].copy()
+
+    # 3) Armar nodos (ids, labels, parents, valores y clientes) por nivel
+    lvl0 = peso_centro.merge(cli_centro, on=["CENTRO"])  # CENTRO
+    lvl0["id"] = "CENTRO|" + lvl0["CENTRO"].astype(str)
+    lvl0["label"] = lvl0["CENTRO"].astype(str)
+    lvl0["parent"] = ""
+    lvl0["level"] = "CENTRO"
+
+    lvl1 = peso_metodo.merge(cli_metodo, on=["CENTRO", "MÉTODO_VENTA"])  # MÉTODO
+    lvl1["id"] = "MET|" + lvl1["CENTRO"].astype(str) + "|" + lvl1["MÉTODO_VENTA"].astype(str)
+    lvl1["label"] = lvl1["MÉTODO_VENTA"].astype(str)
+    lvl1["parent"] = "CENTRO|" + lvl1["CENTRO"].astype(str)
+    lvl1["level"] = "METODO"
+
+    lvl2 = peso_ritmo.merge(cli_ritmo, on=["CENTRO", "MÉTODO_VENTA", "RITMO"])  # RITMO
+    lvl2["id"] = (
+        "RIT|" + lvl2["CENTRO"].astype(str) + "|" + lvl2["MÉTODO_VENTA"].astype(str) + "|" + lvl2["RITMO"].astype(str)
+    )
+    lvl2["label"] = "Ritmo " + lvl2["RITMO"].astype(str)
+    lvl2["parent"] = "MET|" + lvl2["CENTRO"].astype(str) + "|" + lvl2["MÉTODO_VENTA"].astype(str)
+    lvl2["level"] = "RITMO"
+
+    lvl3 = peso_leaf.merge(cli_leaf, on=["CENTRO", "MÉTODO_VENTA", "RITMO", "FS_label"])  # FS
+    lvl3["id"] = (
+        "FS|" + lvl3["CENTRO"].astype(str) + "|" + lvl3["MÉTODO_VENTA"].astype(str) + "|" + lvl3["RITMO"].astype(str) + "|" + lvl3["FS_label"].astype(str)
+    )
+    lvl3["label"] = lvl3["FS_label"].astype(str)
+    lvl3["parent"] = "RIT|" + lvl3["CENTRO"].astype(str) + "|" + lvl3["MÉTODO_VENTA"].astype(str) + "|" + lvl3["RITMO"].astype(str)
+    lvl3["level"] = "FS"
+
+    nodes = pd.concat(
+        [
+            lvl0[["id", "label", "parent", "value", "clientes", "level"]],
+            lvl1[["id", "label", "parent", "value", "clientes", "level"]],
+            lvl2[["id", "label", "parent", "value", "clientes", "level"]],
+            lvl3[["id", "label", "parent", "value", "clientes", "level"]],
+        ],
+        ignore_index=True,
+    )
+
+    # 4) Colores por nivel
+    colores_metodo = {
+        '(?)': '#282a2e',
+        '1DA': '#37b741',
+        '2DA': '#cfb53a',
+        '3DA': '#ff0000',
+        'NO DATA': '#ff0000',
+        '-': '#ff0000',
+    }
+    colores_ritmo = {
+        'Ritmo 1.0': '#37b741',
+        'Ritmo 2.0': '#cfb53a',
+        'Ritmo 3.0': '#ff0000',
+        'Ritmo 4.0': '#cfb53a',
+        'Ritmo 5.0': '#ff0000',
+        'Ritmo 6.0': '#ff0000',
+        'Ritmo NO DATA': '#aaaaaa',
+    }
+    colores_fs = {
+        'FS 1': '#37b741', 'FS 2': '#37b741', 'FS 3': '#37b741',
+        'FS 4': '#cfb53a', 'FS 5': '#cfb53a', 'FS 6': '#cfb53a',
+    }
+
+    def pick_color(row):
+        if row['level'] == 'METODO':
+            return colores_metodo.get(row['label'], '#999999')
+        if row['level'] == 'RITMO':
+            return colores_ritmo.get(row['label'], '#999999')
+        if row['level'] == 'FS':
+            return colores_fs.get(row['label'], '#cccccc')
+        # CENTRO
+        return '#444444'
+
+    nodes['color'] = nodes.apply(pick_color, axis=1)
+
+    # 5) Gráfico Sunburst con GO
+    import plotly.graph_objects as go
+    fig = go.Figure(go.Sunburst(
+        ids=nodes['id'],
+        labels=nodes['label'],
+        parents=nodes['parent'],
+        values=nodes['value'],
+        branchvalues='total',
+        marker=dict(colors=nodes['color']),
+        customdata=nodes[['clientes']].to_numpy(),
+        hovertemplate=(
+            '<b>%{label}</b><br>'
+            'Clientes reales: %{customdata[0]:,}<br>'
+            '<extra></extra>'
+        ),
+        maxdepth=4,
+    ))
+
+    fig.update_layout(margin=dict(t=0, l=0, r=0, b=0), width=500, height=500)
+    st.plotly_chart(fig, use_container_width=True)
 
 # Radar y tabla
 col1, col2 = st.columns([3, 4])
@@ -209,30 +329,85 @@ with col1:
     st.plotly_chart(fig, width='strech')
 
 with col2:
-    df_visitas = df_filtrado.groupby('RUTA')[columnas_dias].sum(numeric_only=True)
-    df_visitas['Promedio Diario'] = df_visitas[columnas_dias].mean(axis=1).round(0).astype(int)
-    fuera_parametro = df_visitas[(df_visitas['Promedio Diario'] > 58) | (df_visitas['Promedio Diario'] < 48)]
-    en_parametro = df_visitas[(df_visitas['Promedio Diario'] >= 48) & (df_visitas['Promedio Diario'] <= 58)]
-    st.subheader(f"🗺️ Total de rutas: **{len(fuera_parametro)+len(en_parametro)}**")
+
+    parametros_tipo_ruta = {
+        "Preventa Comercial": {"min": 48, "max": 58},
+        "Farmer Comercial": {"min": 27, "max": 35},
+        "Asesor Mayorista": {"min": 10, "max": 12},
+        "Preventa Especializada TDC": {"min": 22, "max": 38},
+        "EDI": {"min": 0, "max": 99},
+        "IVR": {"min": 0, "max": 99},
+        "Autoservicios": {"min": 0, "max": 99},
+        "Juntos+ Tradicional (Portal)": {"min": 0, "max": 999},
+        "Juntos+ Tradicional": {"min": 0, "max": 999},
+        "Juntos+ Moderno": {"min": 0, "max": 999},
+        "Juntos+ Mayoristas": {"min": 0, "max": 999},
+        "CokeNet Moderno": {"min": 0, "max": 999},
+        "Telventa": {"min": 0, "max": 999}
+    }
+
+    # Agrupar por RUTA y Descripción Tipo, mantener ambas columnas
+    df_visitas = (
+        df_filtrado
+        .groupby(['RUTA', 'Descripción Tipo'])[columnas_dias]
+        .sum(numeric_only=True)
+        .reset_index()
+    )
+    # Calcular Promedio Diario
+    df_visitas['Promedio'] = df_visitas[columnas_dias].mean(axis=1).round(0).astype(int)
+
+    # Determinar si está en rango según parámetros dinámicos
+    def en_rango(row):
+        params = parametros_tipo_ruta.get(row["Descripción Tipo"], {"min": 48, "max": 58})
+        return params["min"] <= row["Promedio"] <= params["max"]
+    df_visitas["En Rango"] = df_visitas.apply(en_rango, axis=1)
+
+    en_parametro = df_visitas[df_visitas["En Rango"]].copy()
+    fuera_parametro = df_visitas[~df_visitas["En Rango"]].copy()
+
+    st.subheader(f"🗺️ Total de rutas: **{len(df_visitas)}**")
     st.write(f"Rutas en parámetro encontradas: **{len(en_parametro)}**")
 
-    def color_dias(val):
-        if val < 48: return 'background-color: rgb(255,222,69,0.8); color: black;'
-        elif val > 58: return 'background-color: rgb(255,69,69,0.8); color: white;'
-        return 'background-color: rgb(69,255,85,0.7); color: black;'
-
     def styled(df_in):
-        return (df_in.reset_index().style
-                .map(color_dias, subset=columnas_dias+['Promedio Diario'])
-                .set_properties(**{'text-align':'center'})
-                .set_table_styles([{'selector':'th','props':[('text-align','center')]}])
-                .hide(axis="index"))
+        def style_row(row):
+            style = {}
+            tipo = row["Descripción Tipo"]
+            val = row["Promedio"]
+            params = parametros_tipo_ruta.get(tipo, {"min": 48, "max": 58})
+            color = 'background-color: rgb(69,255,85,0.7); color: black;'
+            if val < params["min"]:
+                color = 'background-color: rgb(255,222,69,0.8); color: black;'
+            elif val > params["max"]:
+                color = 'background-color: rgb(255,69,69,0.8); color: white;'
+            for col in columnas_dias + ["Promedio"]:
+                style[col] = color
+            return pd.Series(style)
+        return (
+            df_in.style
+            .apply(style_row, axis=1)
+            .set_properties(**{'text-align': 'center'})
+            .set_table_styles([{'selector': 'th', 'props': [('text-align', 'center')]}])
+            .hide(axis="index")
+        )
 
-    st.dataframe(styled(en_parametro), width='stretch', height=200)
+
+    # Mostrar tabla de rutas en parámetro
+    height_en = 400 if fuera_parametro.empty else 200
+    st.dataframe(
+        styled(en_parametro.drop(columns=["En Rango"])),
+        width='stretch',
+        height=height_en
+    )
+
+    # Mostrar tabla de rutas fuera de parámetro solo si existen
     if not fuera_parametro.empty:
         st.write(f"Rutas fuera de parámetro encontradas: **{len(fuera_parametro)}**")
-        st.dataframe(styled(fuera_parametro), width='stretch', height=200)
+        st.dataframe(
+            styled(fuera_parametro.drop(columns=["En Rango"])),
+            width='stretch',
+            height=200
+        )
 
 # Lista de clientes
 st.subheader("📋 Lista de Clientes")
-st.dataframe(df_filtrado[["ID_SAP", "CLIENTE", "RUTA", "Descripción Tipo", "latitud", "longitud"]])
+st.dataframe(df_filtrado[["ID_SAP", "CLIENTE", "TPV", "RUTA", "Descripción Tipo", "latitud", "longitud"]])
