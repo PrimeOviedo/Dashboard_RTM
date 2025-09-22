@@ -17,55 +17,75 @@ df = pd.concat(
     ignore_index=True
 )
 
+df.rename(columns={"Latitud Final": "latitud", "Longitud Final": "longitud"}, inplace=True)
+
 # ───── Filtros dependientes en Sidebar ───────────────────────
-st.sidebar.header("Filtros")
+
 
 def multiselect_all(label, options, key, default_all=True):
     options = [str(o) for o in options]  # asegurar strings
-    select_all = st.sidebar.checkbox(f"Seleccionar todo: {label}", value=default_all, key=f"all_{key}")
+    select_all = st.checkbox(f"Seleccionar todo: {label}", value=default_all, key=f"all_{key}")
     if select_all:
-        return st.sidebar.multiselect(label, options=options, default=options, key=key)
+        return st.multiselect(label, options=options, default=options, key=key)
     else:
-        return st.sidebar.multiselect(label, options=options, key=key)
+        return st.multiselect(label, options=options, key=key)
 
-# 1) Unidad Operativa
-uo_opts = sorted(df['CENTRO'].dropna().unique().tolist())
-uo = st.sidebar.selectbox("Unidad Operativa", options=uo_opts)
+with st.sidebar.expander("Filtros principales", expanded=False):
+    # 1) Unidad Operativa
+    uo_opts = sorted(df['CENTRO'].dropna().unique().tolist())
+    uo_sel = st.multiselect("Unidad Operativa", options=uo_opts, default=uo_opts[:1])
 
-# Subconjunto por UO
-df_uo = df[df['CENTRO'] == uo].copy()
+    # Subconjunto por UO (si no selecciona nada → DataFrame vacío)
+    if uo_sel:
+        df_uo = df[df['CENTRO'].isin(uo_sel)].copy()
+    else:
+        df_uo = df.iloc[0:0].copy()
 
-# 2) Figura Comercial
-figura_opts = sorted(df_uo['Descripción Tipo'].dropna().astype(str).unique().tolist())
-fig_sel = multiselect_all("Figura Comercial", figura_opts, key="figuras", default_all=True)
-df_fig = df_uo[df_uo['Descripción Tipo'].astype(str).isin(fig_sel)] if fig_sel else df_uo.iloc[0:0]
+    # 2) Figura Comercial
+    figura_opts = sorted(df_uo['Descripción Tipo'].dropna().astype(str).unique().tolist())
+    fig_sel = multiselect_all("Figura Comercial", figura_opts, key="figuras", default_all=True)
+    df_fig = df_uo[df_uo['Descripción Tipo'].astype(str).isin(fig_sel)] if fig_sel else df_uo.iloc[0:0]
 
-# 3) Ruta ZPV
-ruta_opts = sorted(df_fig['Ruta ZPV'].dropna().astype(str).unique().tolist())
-ruta_sel = multiselect_all("Ruta ZPV", ruta_opts, key="rutas", default_all=True)
-df_ruta = df_fig[df_fig['Ruta ZPV'].astype(str).isin(ruta_sel)] if ruta_sel else df_fig.iloc[0:0]
+    # 3) Ruta
+    ruta_opts = sorted(df_fig['RUTA'].dropna().astype(str).unique().tolist())
+    ruta_sel = multiselect_all("RUTA", ruta_opts, key="rutas", default_all=True)
+    df_ruta = df_fig[df_fig['RUTA'].astype(str).isin(ruta_sel)] if ruta_sel else df_fig.iloc[0:0]
 
-# 4) Grupo RM1
-grupo_rm1_opts = sorted(df_ruta['GRUPO_RM1'].dropna().astype(str).unique().tolist())
-grupo_rm1_sel = multiselect_all("Grupo RM1", grupo_rm1_opts, key="grm1", default_all=True)
-df_filtrado = df_ruta[df_ruta['GRUPO_RM1'].astype(str).isin(grupo_rm1_sel)] if grupo_rm1_sel else df_ruta.iloc[0:0]
+    # 4) Grupo RM1
+    grupo_rm1_opts = sorted(df_ruta['GRUPO_RM1'].dropna().astype(str).unique().tolist())
+    grupo_rm1_sel = multiselect_all("Grupo RM1", grupo_rm1_opts, key="grm1", default_all=True)
+    df_filtrado = df_ruta[df_ruta['GRUPO_RM1'].astype(str).isin(grupo_rm1_sel)] if grupo_rm1_sel else df_ruta.iloc[0:0]
+
+with st.sidebar.expander("Parámetros", expanded=False):
+    # 1) Metodo de venta
+    mtdo_opts = sorted(df_filtrado['MÉTODO_VENTA'].dropna().astype(str).unique().tolist())
+    mtdo_sel = multiselect_all("Método de Venta", mtdo_opts, key="metodo", default_all=True)
+    df_filtrado = df_filtrado[df_filtrado['MÉTODO_VENTA'].astype(str).isin(mtdo_sel)] if mtdo_sel else df_filtrado.iloc[0:0]
+
+    # 2) Ritmo
+    rit_opts = sorted(df_filtrado['RITMO'].dropna().astype(str).unique().tolist())
+    rit_sel = multiselect_all("Ritmo", rit_opts, key="ritmo", default_all=True)
+    df_filtrado = df_filtrado[
+    df_filtrado['RITMO'].astype(str).isin(rit_sel)] if rit_sel else df_filtrado.iloc[0:0]
+
+with st.sidebar.expander("Configuración de mapa", expanded=False):
+    # Configuración de mapa
+    estilo_mapa = st.selectbox("Estilo de mapa base", ["OpenStreetMap", "MapTiler"])
+    pitch_value = st.slider("Inclinación del mapa (pitch)", min_value=0, max_value=60, value=0)
+    colorear_por = st.selectbox("Colorear puntos por", ["Ninguno", "RUTA", "Descripción Tipo", "GEC_RTM", "GRUPO_RM1"])
 
 # Seguridad: coordenadas
 df_filtrado["latitud"] = pd.to_numeric(df_filtrado["latitud"], errors="coerce")
 df_filtrado["longitud"] = pd.to_numeric(df_filtrado["longitud"], errors="coerce")
 df_filtrado = df_filtrado.dropna(subset=["latitud", "longitud"])
 
-st.subheader(f"Indicadores para la UO: `{uo}`")
+st.subheader(f"Indicadores para la UO: `{uo_sel}`")
 if df_filtrado.empty:
     st.warning("⚠️ No hay registros para los filtros seleccionados.")
     st.stop()
 else:
     st.success(f"🔎 Registros encontrados: **{len(df_filtrado):,}**")
 
-# Configuración de mapa
-estilo_mapa = st.sidebar.selectbox("Estilo de mapa base", ["OpenStreetMap", "MapTiler"])
-pitch_value = st.sidebar.slider("Inclinación del mapa (pitch)", min_value=0, max_value=60, value=0)
-colorear_por = st.sidebar.selectbox("Colorear puntos por", ["Ninguno", "Ruta ZPV", "Descripción Tipo", "GEC_RTM", "GRUPO_RM1"])
 
 def string_to_color(s):
     h = int(hashlib.md5(str(s).encode()).hexdigest(), 16)
@@ -81,7 +101,7 @@ tooltip = {
     "html": """
         <b>Cliente:</b> {ID_SAP}<br>
         <b>Nombre:</b> {CLIENTE}<br>
-        <b>Ruta:</b> {Ruta ZPV}<br>
+        <b>Ruta:</b> {RUTA}<br>
         <b>Figura:</b> {Descripción Tipo}<br>
         <b>GEC:</b> {GEC_RTM}<br>
         <b>Canal:</b> {GRUPO_RM1}
@@ -116,7 +136,7 @@ with col1_1:
     deck = pdk.Deck(map_style=map_style, initial_view_state=view, layers=[puntos_layer], tooltip=tooltip)
     deck.base_map = base_map
     st.subheader("🗺️ Clientes punteados en el mapa")
-    st.pydeck_chart(deck)
+    st.pydeck_chart(deck, use_container_width=True, height=600)
 
     # Leyenda de colores
     def rgba_to_css(rgba_list): r, g, b, a = rgba_list; return f"rgba({r},{g},{b},{a/255:.2f})"
@@ -141,17 +161,17 @@ with col1_1:
 with col1_2:
     st.markdown("### Datos de grupo de clientes")
     df_treemap = df_filtrado.copy()
-    for col in ["CENTRO", "Método_venta ZPV", "Ritmo ZPV", "Fv ZPV"]:
+    for col in ["CENTRO", "MÉTODO_VENTA", "RITMO", "FV"]:
         df_treemap[col] = df_treemap[col].fillna("Sin dato").astype(str)
-    df_treemap['FS'] = df_treemap['Fv ZPV'].str.len()
-    df_sunburst = (df_treemap.groupby(["CENTRO", "Método_venta ZPV", "Ritmo ZPV", "FS"])
+    df_treemap['FS'] = df_treemap['FV'].str.len()
+    df_sunburst = (df_treemap.groupby(["CENTRO", "MÉTODO_VENTA", "RITMO", "FS"])
                    .agg(clientes=("ID_SAP", "nunique")).reset_index())
     df_sunburst["peso"] = 1
-    df_sunburst["Ritmo_label"] = "Ritmo " + df_sunburst["Ritmo ZPV"].astype(str)
+    df_sunburst["Ritmo_label"] = "Ritmo " + df_sunburst["RITMO"].astype(str)
     df_sunburst["FS_label"] = "FS " + df_sunburst["FS"].astype(str)
     fig = px.sunburst(df_sunburst,
-                      path=["CENTRO", "Método_venta ZPV", "Ritmo_label", "FS_label"],
-                      values="peso", custom_data=["clientes"], color="Método_venta ZPV",
+                      path=["CENTRO", "MÉTODO_VENTA", "Ritmo_label", "FS_label"],
+                      values="peso", custom_data=["clientes"], color="MÉTODO_VENTA",
                       maxdepth=4,
                       color_discrete_map={'(?)':'#282a2e','1DA':'#37b741','2DA':'#cfb53a',
                                           '3DA':'#ff0000','NO DATA':'#ff0000','-':'#ff0000'})
@@ -163,10 +183,10 @@ with col1_2:
 col1, col2 = st.columns([3, 4])
 with col1:
     st.subheader("🕸️ Promedio de visitas por día")
-    columnas_dias = ['ZPV_L','ZPV_M','ZPV_R','ZPV_J','ZPV_V','ZPV_S']
+    columnas_dias = ['L','M','R','J','V','S']
     nombres_dias = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado']
     df_filtrado[columnas_dias] = df_filtrado[columnas_dias].apply(pd.to_numeric, errors="coerce")
-    rutas_unicas = df_filtrado['Ruta ZPV'].nunique()
+    rutas_unicas = df_filtrado['RUTA'].nunique()
     promedios = df_filtrado[columnas_dias].sum(numeric_only=True) / max(rutas_unicas, 1)
     valores = promedios.values.tolist()
     valores.append(valores[0])
@@ -189,7 +209,7 @@ with col1:
     st.plotly_chart(fig, width='strech')
 
 with col2:
-    df_visitas = df_filtrado.groupby('Ruta ZPV')[columnas_dias].sum(numeric_only=True)
+    df_visitas = df_filtrado.groupby('RUTA')[columnas_dias].sum(numeric_only=True)
     df_visitas['Promedio Diario'] = df_visitas[columnas_dias].mean(axis=1).round(0).astype(int)
     fuera_parametro = df_visitas[(df_visitas['Promedio Diario'] > 58) | (df_visitas['Promedio Diario'] < 48)]
     en_parametro = df_visitas[(df_visitas['Promedio Diario'] >= 48) & (df_visitas['Promedio Diario'] <= 58)]
@@ -215,4 +235,4 @@ with col2:
 
 # Lista de clientes
 st.subheader("📋 Lista de Clientes")
-st.dataframe(df_filtrado[["ID_SAP", "CLIENTE", "Ruta ZPV", "Descripción Tipo", "latitud", "longitud"]])
+st.dataframe(df_filtrado[["ID_SAP", "CLIENTE", "RUTA", "Descripción Tipo", "latitud", "longitud"]])
