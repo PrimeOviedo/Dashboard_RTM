@@ -43,7 +43,20 @@ with st.sidebar.expander("Filtros principales", expanded=False):
 
     # 2) Figura Comercial
     figura_opts = sorted(df_uo['Descripción Tipo'].dropna().astype(str).unique().tolist())
-    fig_sel = multiselect_all("Figura Comercial", figura_opts, key="figuras", default_all=True)
+
+    # Valores preseleccionados
+    default_figuras = ["Preventa Comercial", "Preventa Comercial On Premise"]
+
+    # Verificar que existan en las opciones
+    default_figuras = [f for f in default_figuras if f in figura_opts]
+
+    fig_sel = st.multiselect(
+        "Figura Comercial",
+        options=figura_opts,
+        default=default_figuras,  # 👈 solo estos dos por defecto
+        key="figuras"
+    )
+
     df_fig = df_uo[df_uo['Descripción Tipo'].astype(str).isin(fig_sel)] if fig_sel else df_uo.iloc[0:0]
 
     # 3) Ruta
@@ -54,7 +67,12 @@ with st.sidebar.expander("Filtros principales", expanded=False):
     # 4) Grupo RM1
     grupo_rm1_opts = sorted(df_ruta['GRUPO_RM1'].dropna().astype(str).unique().tolist())
     grupo_rm1_sel = multiselect_all("Grupo RM1", grupo_rm1_opts, key="grm1", default_all=True)
-    df_filtrado = df_ruta[df_ruta['GRUPO_RM1'].astype(str).isin(grupo_rm1_sel)] if grupo_rm1_sel else df_ruta.iloc[0:0]
+    df_grm1 = df_ruta[df_ruta['GRUPO_RM1'].astype(str).isin(grupo_rm1_sel)] if grupo_rm1_sel else df_ruta.iloc[0:0]
+
+    # 5) Ruta
+    esquema_rep_opts = sorted(df_grm1['EsquemaReparto'].dropna().astype(str).unique().tolist())
+    esquema_rep_sel = multiselect_all("Esquema Reparto", esquema_rep_opts, key="esrep", default_all=True)
+    df_filtrado = df_grm1[df_grm1['EsquemaReparto'].astype(str).isin(esquema_rep_sel)] if esquema_rep_sel else df_grm1.iloc[0:0]
 
 with st.sidebar.expander("Parámetros", expanded=False):
     # 1) Metodo de venta
@@ -112,11 +130,24 @@ tooltip = {
 # Columna izquierda: mapa
 col1_1, col1_2 = st.columns([4, 3])
 with col1_1:
+    # --- Evitar clientes duplicados en el mapa ---
+    df_puntos = (
+        df_filtrado
+        .sort_values("ID_SAP")  # opcional: mantener orden
+        .drop_duplicates(subset=["ID_SAP"])  # 👈 quedarnos solo con un registro por cliente
+        .copy()
+    )
+
+    # Asegurar que lat/lon son numéricos y válidos
+    df_puntos["latitud"] = pd.to_numeric(df_puntos["latitud"], errors="coerce")
+    df_puntos["longitud"] = pd.to_numeric(df_puntos["longitud"], errors="coerce")
+    df_puntos = df_puntos.dropna(subset=["latitud", "longitud"])
+
     view = pdk.ViewState(latitude=df_filtrado['latitud'].mean(skipna=True),
                          longitude=df_filtrado['longitud'].mean(skipna=True),
                          zoom=9, pitch=pitch_value)
     puntos_layer = pdk.Layer("ScatterplotLayer",
-                             data=df_filtrado,
+                             data=df_puntos,
                              get_position='[longitud, latitud]',
                              get_radius=1,
                              radius_scale=6,
@@ -138,22 +169,72 @@ with col1_1:
     st.subheader("🗺️ Clientes punteados en el mapa")
     st.pydeck_chart(deck, use_container_width=True, height=600)
 
+
     # Leyenda de colores
-    def rgba_to_css(rgba_list): r, g, b, a = rgba_list; return f"rgba({r},{g},{b},{a/255:.2f})"
+    def rgba_to_css(rgba_list):
+        r, g, b, a = rgba_list
+        return f"rgba({r},{g},{b},{a / 255:.2f})"
+
+
     if colorear_por != "Ninguno":
         if "color_map_field" not in st.session_state or st.session_state["color_map_field"] != colorear_por:
             st.session_state["color_map_field"] = colorear_por
             categorias_globales = sorted(df[colorear_por].dropna().astype(str).unique())
             st.session_state["color_map"] = {c: rgba_to_css(string_to_color(c)) for c in categorias_globales}
+
         color_map = st.session_state["color_map"]
-        counts = df_filtrado[colorear_por].dropna().astype(str).value_counts()
+        counts = df_puntos[colorear_por].dropna().astype(str).value_counts()
+
         st.markdown(f"### 🎨 Leyenda de colores — *Color por:* `{colorear_por}`")
-        legend_html = "<div class='leyenda-wrap'><div class='leyenda'>"
+
+        legend_html = """
+        <style>
+        .leyenda-wrap {
+            max-height: 180px; overflow-y: auto;
+            padding: 10px 12px; border-radius: 10px;
+            background: rgba(0,0,0,0.6);   /* Fondo oscuro más sólido */
+            border: 1px solid rgba(255,255,255,0.15);
+            color: #fff;                   /* Forzar texto blanco */
+            font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, sans-serif;
+        }
+        .leyenda { display:flex; flex-wrap:wrap; gap:10px; }
+        .item {
+            display:flex; align-items:center; gap:8px;
+            padding:4px 8px;
+            background: rgba(255,255,255,0.05);
+            border:1px solid rgba(255,255,255,0.15);
+            border-radius:6px;
+            font-size:14px;
+            font-weight:500;               /* un poco más gruesa */
+            color: #fff;                   /* texto siempre blanco */
+        }
+        .color-box {
+            width:14px; height:14px; border-radius:3px;
+            border:1px solid rgba(255,255,255,0.4);
+            flex: 0 0 auto;
+        }
+        .small {
+            opacity:.85;
+            font-size:12px;
+            margin-left:4px;
+            color: #ddd;                   /* contraste suave */
+        }
+        </style>
+        <div class='leyenda-wrap'><div class='leyenda'>
+        """
+
         for categoria, cnt in counts.items():
             color = color_map.get(str(categoria), "rgba(200,200,200,0.80)")
-            legend_html += f"<div class='item'><div class='color-box' style='background-color:{color};'></div><span>{categoria} <span class='small'>({cnt:,})</span></span></div>"
+            legend_html += f"""
+            <div class='item'>
+                <div class='color-box' style='background-color:{color};'></div>
+                <span>{categoria}<span class='small'>({cnt:,})</span></span>
+            </div>
+            """
+
         legend_html += "</div></div>"
-        components.html(legend_html, height=120, scrolling=True)
+
+        components.html(legend_html, height=150, scrolling=True)
     else:
         st.info("Selecciona un campo en **Colorear puntos por** para ver la leyenda.")
 
@@ -249,6 +330,12 @@ with col1_2:
         '1DA': '#37b741',
         '2DA': '#cfb53a',
         '3DA': '#ff0000',
+        '4DA': '#ff0000',
+        '5DA': '#ff0000',
+        '6DA': '#ff0000',
+        '7DA': '#ff0000',
+        '8DA': '#ff0000',
+        '9DA': '#ff0000',
         'NO DATA': '#ff0000',
         '-': '#ff0000',
     }
@@ -392,7 +479,7 @@ with col2:
 
 
     # Mostrar tabla de rutas en parámetro
-    height_en = 400 if fuera_parametro.empty else 200
+    height_en = 445 if fuera_parametro.empty else 245
     st.dataframe(
         styled(en_parametro.drop(columns=["En Rango"])),
         width='stretch',
@@ -405,7 +492,7 @@ with col2:
         st.dataframe(
             styled(fuera_parametro.drop(columns=["En Rango"])),
             width='stretch',
-            height=200
+            height=245
         )
 
 # Lista de clientes
