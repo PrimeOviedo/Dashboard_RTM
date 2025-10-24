@@ -1,0 +1,17 @@
+Metadata-Version: 2.1
+Name: streamlit-bokeh-events
+Version: 0.1.2
+Summary: A custom streamlit component to return js event values from bokeh plots to streamlit
+Home-page: UNKNOWN
+Author: Ashish Shukla
+Author-email: ash2shukla@gmail.com
+License: UNKNOWN
+Platform: UNKNOWN
+Requires-Python: >=3.6
+Description-Content-Type: text/plain
+Requires-Dist: bokeh (>=2.0.0)
+Requires-Dist: streamlit (>=0.63)
+
+UNKNOWN
+
+

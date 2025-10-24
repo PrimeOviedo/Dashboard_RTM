@@ -1,0 +1,6 @@
+# Created by venv; see https://docs.python.org/3/library/venv.html
+clientes.csv
+split.py
+volumen.parquet
+clientes.parquet
+MRK.parquet

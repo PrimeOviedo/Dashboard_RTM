@@ -1,0 +1,9 @@
+streamlit
+pandas
+pydeck
+plotly
+matplotlib
+holoviews
+bokeh
+streamlit-bokeh-events
+pysankey
