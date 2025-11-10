@@ -168,7 +168,7 @@ with st.sidebar.expander("Configuración de mapa", expanded=False):
     # Configuración de mapa
     estilo_mapa = st.selectbox("Estilo de mapa base", ["OpenStreetMap", "MapTiler"])
     pitch_value = st.slider("Inclinación del mapa (pitch)", min_value=0, max_value=60, value=0)
-    colorear_por = st.selectbox("Colorear puntos por", ["Ninguno", "RUTA", "Descripción Tipo", "SECTOR", "GEC_RTM", "GRUPO_RM1"])
+    colorear_por = st.selectbox("Colorear puntos por", ["Ninguno", "RUTA", "Descripción Tipo", "SECTOR", "GEC_RTM", "GRUPO_RM1", "FV", "FS"])
 
 # Seguridad: eliminar filas sin coordenadas
 if df_filtrado.empty or "latitud" not in df_filtrado.columns or "longitud" not in df_filtrado.columns:
